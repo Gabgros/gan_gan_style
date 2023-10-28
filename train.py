@@ -16,8 +16,8 @@ import warnings
 # warnings.filterwarnings('ignore')
 
 
-parser = argparse.ArgumentParser(description='CS7643 Assignment-2 Part 2')
-parser.add_argument('--config', default='./config.yaml')
+parser = argparse.ArgumentParser(description='GanGan style encoder training loop')
+parser.add_argument('--config', default='./configs/config.yaml')
 
 in_channels = 3
 output_size = 512
@@ -42,7 +42,7 @@ class DummyModel(nn.Module):
 
 
 def init_ref_image():
-    img = Image.open('out/seed0085.png')
+    img = Image.open('./sanity_check_images/reference_image.png')
     transform = Compose([
         Resize((1024, 1024)),
         ToTensor(),
