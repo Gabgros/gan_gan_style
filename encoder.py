@@ -1,8 +1,13 @@
 import torch
-import torch.nn as nn
-from torchvision.transforms import Compose, Resize, ToTensor
+import legacy
+import dnnlib
+import PIL.Image
 
-from PIL import Image
+import numpy as np
+import torch.nn as nn
+import random as rd
+
+from torchvision.transforms import Compose, Resize, ToTensor
 
 class EncoderBeta(nn.Module):
 
@@ -70,13 +75,25 @@ class EncoderBeta(nn.Module):
         return output
 
 if __name__ == '__main__':
-    img = Image.open('out/seed0085.png')
-    model = EncoderBeta(in_channels=3,
-                        output_size=512)
-    transform = Compose([
-            Resize((1024, 1024)),
-            ToTensor(),
-        ])
-    x = transform(img).unsqueeze(0)
-    out = model(x)
-    print(out.size())
+    input_size = 512
+    output_size = 1024
+    batch_size = 4
+
+    epochs = 10
+    network_pkl = "https://nvlabs-fi-cdn.nvidia.com/stylegan2-ada-pytorch/pretrained/metfaces.pkl"
+
+    print('Loading networks from "%s"...' % network_pkl)
+    device = torch.device('cuda')
+    with dnnlib.util.open_url(network_pkl) as f:
+        G = legacy.load_network_pkl(f)['G_ema'].to(device)
+
+    label = torch.zeros([1, G.c_dim], device=device)
+
+    for epoch in range(epochs):
+        print('Epoch', epoch)
+        z = torch.randn(batch_size, input_size).cuda()
+        img = G(z, label)
+
+        encoder = EncoderBeta(in_channels=3,
+                            output_size=512).cuda()
+        out = encoder(img)
