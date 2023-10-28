@@ -108,7 +108,7 @@ def train(epoch, batch_size, num_batches, model, stylegan, optimizer, criterion)
             print(('Train: Epoch: [{0}][{1}/{2}]\t'
                    'Time {iter_time.val:.3f} ({iter_time.avg:.3f})\t'
                    'Loss {loss.val:.4f} ({loss.avg:.4f})\t')
-                   .format(epoch, batch_idx, batch_size,
+                   .format(epoch, batch_idx, num_batches,
                            iter_time=iter_time, loss=losses))
     losses_list.append([losses.avg.item()])
 
