@@ -42,7 +42,7 @@ class DummyModel(nn.Module):
 
 
 def init_ref_image():
-    img = Image.open('./sanity_check_images/reference_image.png')
+    img = Image.open('./results/sanity_check_images/reference_image.png')
     transform = Compose([
         Resize((1024, 1024)),
         ToTensor(),
@@ -142,12 +142,14 @@ def plot_sanity_check_image(epoch, ref_image, model, stylegan):
     pred_z = model(ref_image)
     img = stylegan(pred_z, dummy_label)
     img = (img.permute(0, 2, 3, 1) * 127.5 + 128).clamp(0, 255).to(torch.uint8)
-    if not os.path.exists('./sanity_check_images'):
-        os.makedirs('./sanity_check_images')
-    Image.fromarray(img[0].cpu().numpy(), 'RGB').save(f'./sanity_check_images/epoch_{epoch}.png')
+    if not os.path.exists('./results/sanity_check_images'):
+        os.makedirs('./results/sanity_check_images')
+    Image.fromarray(img[0].cpu().numpy(), 'RGB').save(f'./results/sanity_check_images/epoch_{epoch}.png')
 
 
 def main():
+    if not os.path.exists('./results'):
+        os.makedirs('./results')
     global args
     args = parser.parse_args()
     with open(args.config) as f:
@@ -185,12 +187,12 @@ def main():
             train(epoch, args.batch_size, args.train_num_batches, model, stylegan, optimizer, criterion)
             validate(epoch, args.batch_size, args.val_num_batches, model, stylegan, criterion)
             plot_sanity_check_image(epoch, ref_image, model, stylegan)
-            save_plot("training_curve.png", losses_list)
+            save_plot("./results/training_curve.png", losses_list)
 
             if epoch % args.save_rate == 0:
-                if not os.path.exists('./checkpoints'):
-                    os.makedirs('./checkpoints')
-                torch.save(model.state_dict(), './checkpoints/' +
+                if not os.path.exists('./results/checkpoints'):
+                    os.makedirs('./results/checkpoints')
+                torch.save(model.state_dict(), './results/checkpoints/' +
                            args.model.lower() + '_' + str(epoch) + '.pth')
                 print("Model saved successfully")
     except KeyboardInterrupt:
