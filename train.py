@@ -84,7 +84,7 @@ class AverageMeter(object):
         self.sum += val * n
         self.count += n
         self.avg = self.sum / self.count
-
+'''
 def train(epoch, batch_size, num_batches, model, stylegan, optimizer, criterion):
 
     iter_time = AverageMeter()
@@ -108,6 +108,50 @@ def train(epoch, batch_size, num_batches, model, stylegan, optimizer, criterion)
             print(('Train: Epoch: [{0}][{1}/{2}]\t'
                    'Time {iter_time.val:.3f} ({iter_time.avg:.3f})\t'
                    'Loss {loss.val:.4f} ({loss.avg:.4f})\t')
+                   .format(epoch, batch_idx, num_batches,
+                           iter_time=iter_time, loss=losses))
+    losses_list.append([losses.avg.item()])
+'''
+
+def train(epoch, batch_size, num_batches, model, stylegan, optimizer, criterion):
+
+    iter_time = AverageMeter()
+    losses = AverageMeter()
+    model.train()
+
+    for batch_idx in range(num_batches):
+        start = time.time()
+        z = torch.randn(batch_size, output_size).cuda()
+        images = stylegan(z, dummy_label)
+
+        pred_z = model(images)
+        loss = criterion(pred_z, z)
+
+        pred_images = stylegan(pred_z, dummy_label) #genetating images using predicted z 
+        mse_loss = F.mse_loss(pred_images, images)
+
+        total_loss = loss + mse_loss
+
+        optimizer.zero_grad()
+        loss.backward()
+
+        #gradient calculation with respect to StyleGAN params
+        stylegan.zero_grad()
+        for param in stylegan.parameters():
+            param.grad = None  
+        fake_images = stylegan(z, dummy_label)
+        fake_images.retain_grad()  
+        loss.backward(retain_graph=True)
+        stylegan_gradient = fake_images.grad 
+        
+        optimizer.step()
+
+        losses.update(loss, pred_z.shape[0])
+        iter_time.update(time.time() - start)
+        if batch_idx % 10 == 0:
+            print(('Train: Epoch: [{0}][{1}/{2}]\t'
+                   'Time {iter_time.val:.3f} ({iter_time.avg:.3f})\t'
+                   'Loss {total_loss.val:.4f} ({total_loss.avg:.4f})\t')
                    .format(epoch, batch_idx, num_batches,
                            iter_time=iter_time, loss=losses))
     losses_list.append([losses.avg.item()])
@@ -179,7 +223,8 @@ def main():
         exit()
 
     optimizer = torch.optim.Adam(model.parameters(), args.learning_rate)
-    # TODO: Add a scheduler
+    # TODO: Add a scheduler, done :) 
+    scheduler = StepLR(optimizer, step_size=args.lr_step_size, gamma=args.lr_gamma)
     stylegan = init_style_gan()
     ref_image = init_ref_image()
     try:
@@ -188,6 +233,8 @@ def main():
             validate(epoch, args.batch_size, args.val_num_batches, model, stylegan, criterion)
             plot_sanity_check_image(epoch, ref_image, model, stylegan)
             save_plot("./results/training_curve.png", losses_list)
+
+            scheduler.step()
 
             if epoch % args.save_rate == 0:
                 if not os.path.exists('./results/checkpoints'):
