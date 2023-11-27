@@ -63,10 +63,21 @@ def init_style_gan():
 
 
 def save_plot(name, plot_list):
-    plt.plot(list(range(len(plot_list))), plot_list)
-    plt.savefig(name)
-    print("Plot saved")
-    plt.clf()
+    losses_list_truncated = [tuple(x[:3]) for x in plot_list]
+    if losses_list_truncated:
+        latent_losses, reconstruction_losses, total_losses = zip(*losses_list_truncated)
+        plt.figure(figsize=(10, 5))
+        plt.plot(latent_losses, label='Latent Loss')
+        plt.plot(reconstruction_losses, label='Reconstruction Loss')
+        plt.plot(total_losses, label='Total Loss')
+        plt.title('Training Losses Over Epochs')
+        plt.xlabel('Epoch')
+        plt.ylabel('Loss')
+        plt.legend()
+        plt.grid(True)
+        plt.savefig(name)
+        plt.close()
+        print("Plot saved")
 
 
 class AverageMeter(object):
@@ -104,9 +115,9 @@ def train(epoch, batch_size, num_batches, model, stylegan, optimizer, criterion)
         latent_loss = criterion(pred_z, z)
         
         pred_images = stylegan(pred_z, dummy_label) #genetating images using predicted z 
-        reconstruction_loss = criterion(pred_images, images)
+        reconstruction_loss = criterion(pred_images, images) if args.reconstruction_loss_weight != -1 else torch.Tensor([0])
 
-        loss = latent_loss + reconstruction_loss
+        loss = args.latent_loss_weight * latent_loss + args.reconstruction_loss_weight * reconstruction_loss
 
         optimizer.zero_grad()
         loss.backward()
@@ -150,9 +161,9 @@ def validate(epoch, batch_size, num_batches, model, stylegan, criterion):
             latent_loss = criterion(pred_z, z)
 
             pred_images = stylegan(pred_z, dummy_label)
-            reconstruction_loss = criterion(pred_images, images)
+            reconstruction_loss = criterion(pred_images, images) if args.reconstruction_loss_weight != -1 else torch.Tensor([0])
 
-            loss = latent_loss + reconstruction_loss
+            loss = args.latent_loss_weight * latent_loss + args.reconstruction_loss_weight * reconstruction_loss
 
         latent_losses.update(latent_loss.item(), pred_z.shape[0])
         reconstruction_losses.update(reconstruction_loss.item(), pred_z.shape[0])
@@ -222,27 +233,7 @@ def main():
             train(epoch, args.batch_size, args.train_num_batches, model, stylegan, optimizer, criterion)
             validate(epoch, args.batch_size, args.val_num_batches, model, stylegan, criterion)
             plot_sanity_check_image(epoch, ref_image, model, stylegan)
-
             save_plot("./results/training_curve.png", losses_list)
-            
-            losses_list_truncated = [tuple(x[:3]) for x in losses_list]
-
-            if losses_list_truncated:
-              latent_losses, reconstruction_losses, total_losses = zip(*losses_list_truncated)
-
-              plt.figure(figsize=(10, 5))
-              plt.plot(latent_losses, label='Latent Loss')
-              plt.plot(reconstruction_losses, label='Reconstruction Loss')
-              plt.plot(total_losses, label='Total Loss')
-              plt.title('Training Losses Over Epochs')
-              plt.xlabel('Epoch')
-              plt.ylabel('Loss')
-              plt.legend()
-              plt.grid(True)
-              plt.savefig("./results/losses_plot.png")
-              plt.close()
-
-            save_plot("./results/training_curve.png", losses_list_truncated)
 
             scheduler.step()
 
