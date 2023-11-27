@@ -232,10 +232,10 @@ def main():
         for epoch in range(args.epochs):
             train(epoch, args.batch_size, args.train_num_batches, model, stylegan, optimizer, criterion)
             validate(epoch, args.batch_size, args.val_num_batches, model, stylegan, criterion)
-            plot_sanity_check_image(epoch, ref_image, model, stylegan)
-            save_plot("./results/training_curve.png", losses_list)
-
             scheduler.step()
+            if epoch % args.plot_rate == 0:
+                plot_sanity_check_image(epoch, ref_image, model, stylegan)
+                save_plot("./results/training_curve.png", losses_list)
 
             if epoch % args.save_rate == 0:
                 if not os.path.exists('./results/checkpoints'):
