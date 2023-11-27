@@ -13,6 +13,7 @@ import dnnlib
 from torch.backends import cudnn
 cudnn.benchmark = True
 import warnings
+from torch.optim.lr_scheduler import StepLR
 # warnings.filterwarnings('ignore')
 
 
@@ -85,11 +86,13 @@ class AverageMeter(object):
         self.count += n
         self.avg = self.sum / self.count
 
-# TODO: (NIT) As a general rule of thumb, do not be afraid to erase or overwrite code, everything is backed by git :)
+
 def train(epoch, batch_size, num_batches, model, stylegan, optimizer, criterion):
 
     iter_time = AverageMeter()
-    losses = AverageMeter()
+    latent_losses = AverageMeter()
+    reconstruction_losses = AverageMeter()
+    total_losses = AverageMeter()
     model.train()
 
     for batch_idx in range(num_batches):
@@ -99,9 +102,7 @@ def train(epoch, batch_size, num_batches, model, stylegan, optimizer, criterion)
 
         pred_z = model(images)
         latent_loss = criterion(pred_z, z)
-        # TODO: I changed the variable naming and added the reconstructoin loss term to the loss calculation.
-        # TODO: However, the backward step is taking way too long, not sure why. Can you dig into this so it takes
-        # TODO: a reasonable amount of time?
+        
         pred_images = stylegan(pred_z, dummy_label) #genetating images using predicted z 
         reconstruction_loss = criterion(pred_images, images)
 
@@ -109,36 +110,35 @@ def train(epoch, batch_size, num_batches, model, stylegan, optimizer, criterion)
 
         optimizer.zero_grad()
         loss.backward()
-        #TODO: Why is this necessary? I think StyleGAN is alreay returning a gradient. Moreover, I am not sure I
-        #TODO: understand what this is doing.
-        #gradient calculation with respect to StyleGAN params
-        stylegan.zero_grad()
-        for param in stylegan.parameters():
-            param.grad = None  
-        fake_images = stylegan(z, dummy_label)
-        fake_images.retain_grad()  
-        loss.backward(retain_graph=True)
-        stylegan_gradient = fake_images.grad 
-        
         optimizer.step()
 
-        losses.update(loss, pred_z.shape[0])
+        latent_losses.update(latent_loss.item(), pred_z.shape[0])
+        reconstruction_losses.update(reconstruction_loss.item(), pred_z.shape[0])
+        total_losses.update(loss.item(), pred_z.shape[0])
+
         iter_time.update(time.time() - start)
         if batch_idx % 10 == 0:
-            # TODO: Add printing such that we can see the latent loss, the reconstruction loss and the total loss.
-            # TODO: Make sure you are using the AverageMeter
             print(('Train: Epoch: [{0}][{1}/{2}]\t'
                    'Time {iter_time.val:.3f} ({iter_time.avg:.3f})\t'
-                   'Loss {total_loss.val:.4f} ({total_loss.avg:.4f})\t')
-                   .format(epoch, batch_idx, num_batches,
-                           iter_time=iter_time, loss=losses))
-    # TODO: add the latent loss, reconstruction loss and total loss to a list so we can print it later.
-    losses_list.append([losses.avg.item()])
+                   'Latent Loss {latent_loss.val:.4f} ({latent_loss.avg:.4f})\t'
+                   'Reconstruction Loss {reconstruction_loss.val:.4f} ({reconstruction_loss.avg:.4f})\t'
+                   'Total Loss {total_loss.val:.4f} ({total_loss.avg:.4f})\t')
+                  .format(epoch, batch_idx, num_batches,
+                          iter_time=iter_time, latent_loss=latent_losses,
+                          reconstruction_loss=reconstruction_losses, total_loss=total_losses))
 
-# TODO: Same as for train
+    
+    losses_list.append([float(latent_losses.avg), float(reconstruction_losses.avg), float(total_losses.avg)])
+
+
+
 def validate(epoch, batch_size, num_batches, model, stylegan, criterion):
     iter_time = AverageMeter()
-    losses = AverageMeter()
+    
+    latent_losses = AverageMeter()
+    reconstruction_losses = AverageMeter()
+    total_losses = AverageMeter()
+
     model.eval()
     # evaluation loop
     for batch_idx in range(num_batches):
@@ -147,18 +147,30 @@ def validate(epoch, batch_size, num_batches, model, stylegan, criterion):
         images = stylegan(z, dummy_label)
         with torch.inference_mode():
             pred_z = model(images)
-            loss = criterion(pred_z, z)
+            latent_loss = criterion(pred_z, z)
 
-        losses.update(loss, pred_z.shape[0])
+            pred_images = stylegan(pred_z, dummy_label)
+            reconstruction_loss = criterion(pred_images, images)
+
+            loss = latent_loss + reconstruction_loss
+
+        latent_losses.update(latent_loss.item(), pred_z.shape[0])
+        reconstruction_losses.update(reconstruction_loss.item(), pred_z.shape[0])
+        total_losses.update(loss.item(), pred_z.shape[0])
+
+        
         iter_time.update(time.time() - start)
         if batch_idx % 10 == 0:
             print(('Validation: Epoch: [{0}][{1}/{2}]\t'
                    'Time {iter_time.val:.3f} ({iter_time.avg:.3f})\t'
-                   'Loss {loss.val:.4f} ({loss.avg:.4f})\t')
-                  .format(epoch, batch_idx, batch_size,
-                          iter_time=iter_time, loss=losses))
+                   'Latent Loss {latent_loss.val:.4f} ({latent_loss.avg:.4f})\t'
+                   'Reconstruction Loss {reconstruction_loss.val:.4f} ({reconstruction_loss.avg:.4f})\t'
+                   'Total Loss {total_loss.val:.4f} ({total_loss.avg:.4f})\t')
+                  .format(epoch, batch_idx, num_batches,
+                          iter_time=iter_time, latent_loss=latent_losses,
+                          reconstruction_loss=reconstruction_losses, total_loss=total_losses))
 
-    losses_list[-1].append(losses.avg.item())
+    losses_list[-1].extend([float(latent_losses.avg), float(reconstruction_losses.avg), float(total_losses.avg)])
 
 def plot_sanity_check_image(epoch, ref_image, model, stylegan):
     model.eval()
@@ -202,7 +214,6 @@ def main():
         exit()
 
     optimizer = torch.optim.Adam(model.parameters(), args.learning_rate)
-    # TODO: Add the appropiate import for the scheduler. Add the lr_gamma argument to the config file.
     scheduler = StepLR(optimizer, step_size=args.lr_step_size, gamma=args.lr_gamma)
     stylegan = init_style_gan()
     ref_image = init_ref_image()
@@ -211,10 +222,29 @@ def main():
             train(epoch, args.batch_size, args.train_num_batches, model, stylegan, optimizer, criterion)
             validate(epoch, args.batch_size, args.val_num_batches, model, stylegan, criterion)
             plot_sanity_check_image(epoch, ref_image, model, stylegan)
-            # TODO: plot the latent loss, reconstruction loss and total loss.
-            save_plot("./results/training_curve.png", losses_list)
 
-            # scheduler.step()
+            save_plot("./results/training_curve.png", losses_list)
+            
+            losses_list_truncated = [tuple(x[:3]) for x in losses_list]
+
+            if losses_list_truncated:
+              latent_losses, reconstruction_losses, total_losses = zip(*losses_list_truncated)
+
+              plt.figure(figsize=(10, 5))
+              plt.plot(latent_losses, label='Latent Loss')
+              plt.plot(reconstruction_losses, label='Reconstruction Loss')
+              plt.plot(total_losses, label='Total Loss')
+              plt.title('Training Losses Over Epochs')
+              plt.xlabel('Epoch')
+              plt.ylabel('Loss')
+              plt.legend()
+              plt.grid(True)
+              plt.savefig("./results/losses_plot.png")
+              plt.close()
+
+            save_plot("./results/training_curve.png", losses_list_truncated)
+
+            scheduler.step()
 
             if epoch % args.save_rate == 0:
                 if not os.path.exists('./results/checkpoints'):
