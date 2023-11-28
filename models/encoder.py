@@ -8,59 +8,64 @@ class Encoder(nn.Module):
     def __init__(self, in_channels, output_size):
         super(Encoder, self).__init__()
         # Nb of filters for each layer
-        self.oneto2 = 32
-        self.twoto3 = 64
-        self.threeto4 = 128
-        self.fourto5 = 128
-        self.fiveto6 = 64
-        self.sixto7 = 32
+        base_nb_filters = 32
+        self.layer_1_kernel_size = base_nb_filters
+        self.layer_2_kernel_size = base_nb_filters * 2
+        self.layer_3_kernel_size = base_nb_filters * 4
+        self.layer_4_kernel_size = base_nb_filters * 8
+        self.layer_5_kernel_size = base_nb_filters * 4
+        self.layer_6_kernel_size = base_nb_filters * 2
+        self.layer_7_kernel_size = base_nb_filters
         # FC Layers
-        self.convtoFC = 32 * 16 * 128
-        self.sevento8 = 1024
-        self.eightto9 = 512
-        # Non-linearity at the end only for the instruments
-        self.mysoftmax = nn.Softmax(dim=1)
+        self.convtoFC = 8 * 8 * self.layer_7_kernel_size
+        self.fc_1_size = 1024
+        self.output = 512
 
         # Convolutional layers
         self.layer1 = nn.Sequential(
             nn.BatchNorm2d(in_channels),
-            nn.Conv2d(in_channels, self.oneto2, kernel_size=3, stride=2, padding=1),
+            nn.Conv2d(in_channels, self.layer_1_kernel_size, kernel_size=3, stride=2, padding=1),
             nn.LeakyReLU())
         self.layer2 = nn.Sequential(
-            nn.BatchNorm2d(self.oneto2),
-            nn.Conv2d(self.oneto2, self.twoto3, kernel_size=3, stride=(2, 1), padding=1),
+            nn.BatchNorm2d(self.layer_1_kernel_size),
+            nn.Conv2d(self.layer_1_kernel_size, self.layer_2_kernel_size, kernel_size=3, stride=2, padding=1),
             nn.LeakyReLU())
         self.layer3 = nn.Sequential(
-            nn.BatchNorm2d(self.twoto3),
-            nn.Conv2d(self.twoto3, self.threeto4, kernel_size=3, stride=2, padding=1),
+            nn.BatchNorm2d(self.layer_2_kernel_size),
+            nn.Conv2d(self.layer_2_kernel_size, self.layer_3_kernel_size, kernel_size=3, stride=2, padding=1),
             nn.LeakyReLU())
         self.layer4 = nn.Sequential(
-            nn.BatchNorm2d(self.threeto4),
-            nn.Conv2d(self.threeto4, self.fourto5, kernel_size=3, stride=(2, 1), padding=1),
+            nn.BatchNorm2d(self.layer_3_kernel_size),
+            nn.Conv2d(self.layer_3_kernel_size, self.layer_4_kernel_size, kernel_size=3, stride=2, padding=1),
             nn.LeakyReLU())
         self.layer5 = nn.Sequential(
-            nn.BatchNorm2d(self.fourto5),
-            nn.Conv2d(self.fourto5, self.fiveto6, kernel_size=3, stride=2, padding=1),
+            nn.BatchNorm2d(self.layer_4_kernel_size),
+            nn.Conv2d(self.layer_4_kernel_size, self.layer_5_kernel_size, kernel_size=3, stride=2, padding=1),
             nn.LeakyReLU())
         self.layer6 = nn.Sequential(
-            nn.BatchNorm2d(self.fiveto6),
-            nn.Conv2d(self.fiveto6, self.sixto7, kernel_size=3, stride=(2, 1), padding=1),
+            nn.BatchNorm2d(self.layer_5_kernel_size),
+            nn.Conv2d(self.layer_5_kernel_size, self.layer_6_kernel_size, kernel_size=3, stride=2, padding=1),
+            nn.LeakyReLU())
+        self.layer7 = nn.Sequential(
+            nn.BatchNorm2d(self.layer_6_kernel_size),
+            nn.Conv2d(self.layer_6_kernel_size, self.layer_7_kernel_size, kernel_size=3, stride=2, padding=1),
             nn.LeakyReLU())
 
         # Linear layers
-        self.layer7 = nn.Sequential(
-            nn.BatchNorm1d(self.convtoFC),
-            nn.Linear(self.convtoFC, self.sevento8),
-            nn.LeakyReLU())
         self.layer8 = nn.Sequential(
-            nn.BatchNorm1d(self.sevento8),
-            nn.Linear(self.sevento8, self.eightto9),
+            nn.BatchNorm1d(self.convtoFC),
+            nn.Linear(self.convtoFC, self.fc_1_size),
             nn.LeakyReLU())
-        self.layer9 = nn.Linear(self.eightto9, output_size)
+        self.layer9 = nn.Sequential(
+            nn.BatchNorm1d(self.fc_1_size),
+            nn.Linear(self.fc_1_size, self.output),
+            nn.LeakyReLU())
+        self.layer10 = nn.Linear(self.output, output_size)
 
         # Group layers by kind
-        self.convlayers = nn.Sequential(self.layer1, self.layer2, self.layer3, self.layer4, self.layer5, self.layer6)
-        self.fclayers = nn.Sequential(self.layer7, self.layer8, self.layer9)
+        self.convlayers = nn.Sequential(self.layer1, self.layer2, self.layer3, self.layer4,
+                                        self.layer5, self.layer6, self.layer7)
+        self.fclayers = nn.Sequential(self.layer8, self.layer9, self.layer10)
 
     def forward(self, x):
         output = self.convlayers(x)
