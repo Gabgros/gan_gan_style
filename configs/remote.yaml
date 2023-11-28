@@ -1,14 +1,14 @@
 Train:
-  epochs: 100
-  batch_size: 64
-  train_num_batches: 50
-  val_num_batches: 20
-  save_rate: 10
+  epochs: 100000
+  batch_size: 8
+  train_num_batches: 100
+  val_num_batches: 0
+  save_rate: 50
   plot_rate: 4
-  learning_rate: 0.00001
+  learning_rate: 0.0005
   lr_step_size: 30
   lr_gamma: 0.5
-  reconstruction_loss_weight: 1
+  reconstruction_loss_weight: 5
   latent_loss_weight: 1
 
 network:

@@ -225,14 +225,15 @@ def main():
         exit()
 
     optimizer = torch.optim.Adam(model.parameters(), args.learning_rate)
-    scheduler = StepLR(optimizer, step_size=args.lr_step_size, gamma=args.lr_gamma)
+    # We will add back the scheduler later, once we have better results.
+    # scheduler = StepLR(optimizer, step_size=args.lr_step_size, gamma=args.lr_gamma)
     stylegan = init_style_gan()
     ref_image = init_ref_image()
     try:
         for epoch in range(args.epochs):
             train(epoch, args.batch_size, args.train_num_batches, model, stylegan, optimizer, criterion)
             validate(epoch, args.batch_size, args.val_num_batches, model, stylegan, criterion)
-            scheduler.step()
+            # scheduler.step()
             if epoch % args.plot_rate == 0:
                 plot_sanity_check_image(epoch, ref_image, model, stylegan)
                 save_plot("./results/training_curve.png", losses_list)
@@ -244,11 +245,13 @@ def main():
                            args.model.lower() + '_' + str(epoch) + '.pth')
                 print("Model saved successfully")
     except KeyboardInterrupt:
+        plot_sanity_check_image("stop", ref_image, model, stylegan)
+        save_plot("./results/training_curve.png", losses_list)
         if not os.path.exists('./checkpoints'):
             os.makedirs('./checkpoints')
         torch.save(model.state_dict(), './checkpoints/' +
                    args.model.lower() + '_stop.pth')
-        print("Model saved successfully")
+        print("Model saved successfully. Gracefully exiting...")
 
 
 if __name__ == '__main__':
