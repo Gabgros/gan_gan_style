@@ -24,6 +24,7 @@ in_channels = 3
 output_size = 512
 network_pkl = "https://nvlabs-fi-cdn.nvidia.com/stylegan2-ada-pytorch/pretrained/metfaces.pkl"
 dummy_label = None
+checkpoints_dir = './results/checkpoints/'
 losses_list = []
 
 class DummyStyleGan(nn.Module):
@@ -115,7 +116,7 @@ def train(epoch, batch_size, num_batches, model, stylegan, optimizer, criterion)
         latent_loss = criterion(pred_z, z)
         
         pred_images = stylegan(pred_z, dummy_label) #genetating images using predicted z 
-        reconstruction_loss = criterion(pred_images, images) if args.reconstruction_loss_weight != -1 else torch.Tensor([0])
+        reconstruction_loss = criterion(pred_images, images) if args.reconstruction_loss_weight != -1 else torch.Tensor([0]).to(pred_images.device)
 
         loss = args.latent_loss_weight * latent_loss + args.reconstruction_loss_weight * reconstruction_loss
 
@@ -196,6 +197,8 @@ def plot_sanity_check_image(epoch, ref_image, model, stylegan):
 def main():
     if not os.path.exists('./results'):
         os.makedirs('./results')
+    if not os.path.exists(checkpoints_dir):
+        os.makedirs(checkpoints_dir)
     global args
     args = parser.parse_args()
     with open(args.config) as f:
@@ -237,20 +240,15 @@ def main():
             if epoch % args.plot_rate == 0:
                 plot_sanity_check_image(epoch, ref_image, model, stylegan)
                 save_plot("./results/training_curve.png", losses_list)
+                print("Results saved")
 
             if epoch % args.save_rate == 0:
-                if not os.path.exists('./results/checkpoints'):
-                    os.makedirs('./results/checkpoints')
-                torch.save(model.state_dict(), './results/checkpoints/' +
-                           args.model.lower() + '_' + str(epoch) + '.pth')
+                torch.save(model.state_dict(), checkpoints_dir + args.model.lower() + '_' + str(epoch) + '.pth')
                 print("Model saved successfully")
     except KeyboardInterrupt:
         plot_sanity_check_image("stop", ref_image, model, stylegan)
         save_plot("./results/training_curve.png", losses_list)
-        if not os.path.exists('./checkpoints'):
-            os.makedirs('./checkpoints')
-        torch.save(model.state_dict(), './checkpoints/' +
-                   args.model.lower() + '_stop.pth')
+        torch.save(model.state_dict(), checkpoints_dir + args.model.lower() + '_stop.pth')
         print("Model saved successfully. Gracefully exiting...")
 
 
