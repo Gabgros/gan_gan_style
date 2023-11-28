@@ -64,21 +64,23 @@ def init_style_gan():
 
 
 def save_plot(name, plot_list):
-    losses_list_truncated = [tuple(x[:3]) for x in plot_list]
-    if losses_list_truncated:
-        latent_losses, reconstruction_losses, total_losses = zip(*losses_list_truncated)
-        plt.figure(figsize=(10, 5))
+    plt.figure(figsize=(10, 5))
+    if args.reconstruction_loss_weight != -1:
+        latent_losses, reconstruction_losses, total_losses = zip(*plot_list)
         plt.plot(latent_losses, label='Latent Loss')
         plt.plot(reconstruction_losses, label='Reconstruction Loss')
-        plt.plot(total_losses, label='Total Loss')
-        plt.title('Training Losses Over Epochs')
-        plt.xlabel('Epoch')
-        plt.ylabel('Loss')
-        plt.legend()
-        plt.grid(True)
-        plt.savefig(name)
-        plt.close()
-        print("Plot saved")
+    else:
+        total_losses = plot_list
+
+    plt.plot(total_losses, label='Total Loss')
+    plt.title('Training Losses Over Epochs')
+    plt.xlabel('Epoch')
+    plt.ylabel('Loss')
+    plt.legend()
+    plt.grid(True)
+    plt.savefig(name)
+    plt.close()
+    print("Plot saved")
 
 
 class AverageMeter(object):
@@ -114,75 +116,45 @@ def train(epoch, batch_size, num_batches, model, stylegan, optimizer, criterion)
 
         pred_z = model(images)
         latent_loss = criterion(pred_z, z)
-        
-        pred_images = stylegan(pred_z, dummy_label) #genetating images using predicted z 
-        reconstruction_loss = criterion(pred_images, images) if args.reconstruction_loss_weight != -1 else torch.Tensor([0]).to(pred_images.device)
 
-        loss = args.latent_loss_weight * latent_loss + args.reconstruction_loss_weight * reconstruction_loss
+        if args.reconstruction_loss_weight != -1:
+            pred_images = stylegan(pred_z, dummy_label)  # genetating images using predicted z
+            reconstruction_loss = criterion(pred_images, images)
+            loss = args.latent_loss_weight * latent_loss + args.reconstruction_loss_weight * reconstruction_loss
+        else:
+            loss = latent_loss
 
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
+        if args.reconstruction_loss_weight != -1:
+            reconstruction_losses.update(reconstruction_loss.item(), pred_z.shape[0])
+            latent_losses.update(latent_loss.item(), pred_z.shape[0])
 
-        latent_losses.update(latent_loss.item(), pred_z.shape[0])
-        reconstruction_losses.update(reconstruction_loss.item(), pred_z.shape[0])
         total_losses.update(loss.item(), pred_z.shape[0])
 
         iter_time.update(time.time() - start)
         if batch_idx % 10 == 0:
-            print(('Train: Epoch: [{0}][{1}/{2}]\t'
-                   'Time {iter_time.val:.3f} ({iter_time.avg:.3f})\t'
-                   'Latent Loss {latent_loss.val:.4f} ({latent_loss.avg:.4f})\t'
-                   'Reconstruction Loss {reconstruction_loss.val:.4f} ({reconstruction_loss.avg:.4f})\t'
-                   'Total Loss {total_loss.val:.4f} ({total_loss.avg:.4f})\t')
-                  .format(epoch, batch_idx, num_batches,
-                          iter_time=iter_time, latent_loss=latent_losses,
-                          reconstruction_loss=reconstruction_losses, total_loss=total_losses))
+            if args.reconstruction_loss_weight != -1:
+                print(('Train: Epoch: [{0}][{1}/{2}]\t'
+                       'Time {iter_time.val:.3f} ({iter_time.avg:.3f})\t'
+                       'Latent Loss {latent_loss.val:.4f} ({latent_loss.avg:.4f})\t'
+                       'Reconstruction Loss {reconstruction_loss.val:.4f} ({reconstruction_loss.avg:.4f})\t'
+                       'Total Loss {total_loss.val:.4f} ({total_loss.avg:.4f})\t')
+                      .format(epoch, batch_idx, num_batches,
+                              iter_time=iter_time, latent_loss=latent_losses,
+                              reconstruction_loss=reconstruction_losses, total_loss=total_losses))
+            else:
+                print(('Train: Epoch: [{0}][{1}/{2}]\t'
+                       'Time {iter_time.val:.3f} ({iter_time.avg:.3f})\t'
+                       'Total Loss {total_loss.val:.4f} ({total_loss.avg:.4f})\t')
+                      .format(epoch, batch_idx, num_batches,
+                              iter_time=iter_time, total_loss=total_losses))
+    if args.reconstruction_loss_weight != -1:
+        losses_list.append([float(latent_losses.avg), float(reconstruction_losses.avg), float(total_losses.avg)])
+    else:
+        losses_list.append([float(total_losses.avg)])
 
-    
-    losses_list.append([float(latent_losses.avg), float(reconstruction_losses.avg), float(total_losses.avg)])
-
-
-
-def validate(epoch, batch_size, num_batches, model, stylegan, criterion):
-    iter_time = AverageMeter()
-    
-    latent_losses = AverageMeter()
-    reconstruction_losses = AverageMeter()
-    total_losses = AverageMeter()
-
-    model.eval()
-    # evaluation loop
-    for batch_idx in range(num_batches):
-        start = time.time()
-        z = torch.randn(batch_size, output_size).cuda()
-        images = stylegan(z, dummy_label)
-        with torch.inference_mode():
-            pred_z = model(images)
-            latent_loss = criterion(pred_z, z)
-
-            pred_images = stylegan(pred_z, dummy_label)
-            reconstruction_loss = criterion(pred_images, images) if args.reconstruction_loss_weight != -1 else torch.Tensor([0])
-
-            loss = args.latent_loss_weight * latent_loss + args.reconstruction_loss_weight * reconstruction_loss
-
-        latent_losses.update(latent_loss.item(), pred_z.shape[0])
-        reconstruction_losses.update(reconstruction_loss.item(), pred_z.shape[0])
-        total_losses.update(loss.item(), pred_z.shape[0])
-
-        
-        iter_time.update(time.time() - start)
-        if batch_idx % 10 == 0:
-            print(('Validation: Epoch: [{0}][{1}/{2}]\t'
-                   'Time {iter_time.val:.3f} ({iter_time.avg:.3f})\t'
-                   'Latent Loss {latent_loss.val:.4f} ({latent_loss.avg:.4f})\t'
-                   'Reconstruction Loss {reconstruction_loss.val:.4f} ({reconstruction_loss.avg:.4f})\t'
-                   'Total Loss {total_loss.val:.4f} ({total_loss.avg:.4f})\t')
-                  .format(epoch, batch_idx, num_batches,
-                          iter_time=iter_time, latent_loss=latent_losses,
-                          reconstruction_loss=reconstruction_losses, total_loss=total_losses))
-
-    losses_list[-1].extend([float(latent_losses.avg), float(reconstruction_losses.avg), float(total_losses.avg)])
 
 def plot_sanity_check_image(epoch, ref_image, model, stylegan):
     model.eval()
@@ -235,7 +207,6 @@ def main():
     try:
         for epoch in range(args.epochs):
             train(epoch, args.batch_size, args.train_num_batches, model, stylegan, optimizer, criterion)
-            validate(epoch, args.batch_size, args.val_num_batches, model, stylegan, criterion)
             # scheduler.step()
             if epoch % args.plot_rate == 0:
                 plot_sanity_check_image(epoch, ref_image, model, stylegan)
