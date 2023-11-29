@@ -63,24 +63,28 @@ def init_style_gan():
     return stylegan
 
 
-def save_plot(name, plot_list):
+def save_plot(name, label, plot_list):
     plt.figure(figsize=(10, 5))
-    if args.reconstruction_loss_weight != -1:
-        latent_losses, reconstruction_losses, total_losses = zip(*plot_list)
-        plt.plot(latent_losses, label='Latent Loss')
-        plt.plot(reconstruction_losses, label='Reconstruction Loss')
-    else:
-        total_losses = plot_list
-
-    plt.plot(total_losses, label='Total Loss')
-    plt.title('Training Losses Over Epochs')
+    plt.plot(plot_list, label=label)
+    plt.title('Training Loss Over Epochs')
     plt.xlabel('Epoch')
     plt.ylabel('Loss')
     plt.legend()
     plt.grid(True)
     plt.savefig(name)
     plt.close()
-    print("Plot saved")
+    print(f"Plot {label} saved")
+
+def save_all_plots(dir_prefix, all_plot_list):
+    plt.figure(figsize=(10, 5))
+    if args.reconstruction_loss_weight != -1:
+        latent_losses, reconstruction_losses, total_losses = zip(*all_plot_list)
+        save_plot(dir_prefix + "/latent_loss_curve.png", "Latent Loss", latent_losses)
+        save_plot(dir_prefix + "/reconstruction_loss_curve.png", "Reconstruction Loss", reconstruction_losses)
+    else:
+        total_losses = all_plot_list
+
+    save_plot(dir_prefix + "/loss_curve.png", "Loss", total_losses)
 
 
 class AverageMeter(object):
@@ -210,7 +214,7 @@ def main():
             # scheduler.step()
             if epoch % args.plot_rate == 0:
                 plot_sanity_check_image(epoch, ref_image, model, stylegan)
-                save_plot("./results/training_curve.png", losses_list)
+                save_all_plots("./results", losses_list)
                 print("Results saved")
 
             if epoch % args.save_rate == 0:
@@ -218,7 +222,7 @@ def main():
                 print("Model saved successfully")
     except KeyboardInterrupt:
         plot_sanity_check_image("stop", ref_image, model, stylegan)
-        save_plot("./results/training_curve.png", losses_list)
+        save_all_plots("./results.png", losses_list)
         torch.save(model.state_dict(), checkpoints_dir + args.model.lower() + '_stop.pth')
         print("Model saved successfully. Gracefully exiting...")
 
