@@ -14,6 +14,7 @@ from torch.backends import cudnn
 cudnn.benchmark = True
 import warnings
 from torch.optim.lr_scheduler import StepLR
+from torchmetrics.image.inception import InceptionScore
 # warnings.filterwarnings('ignore')
 
 
@@ -106,12 +107,13 @@ class AverageMeter(object):
 
 
 def train(epoch, batch_size, num_batches, model, stylegan, optimizer, criterion):
-
     iter_time = AverageMeter()
     latent_losses = AverageMeter()
     reconstruction_losses = AverageMeter()
     total_losses = AverageMeter()
     model.train()
+
+    inception_score = InceptionScore()
 
     for batch_idx in range(num_batches):
         start = time.time()
@@ -122,11 +124,13 @@ def train(epoch, batch_size, num_batches, model, stylegan, optimizer, criterion)
         latent_loss = criterion(pred_z, z)
 
         if args.reconstruction_loss_weight != -1:
-            pred_images = stylegan(pred_z, dummy_label)  # genetating images using predicted z
+            pred_images = stylegan(pred_z, dummy_label) # genetating images using predicted z
             reconstruction_loss = criterion(pred_images, images)
             loss = args.latent_loss_weight * latent_loss + args.reconstruction_loss_weight * reconstruction_loss
         else:
             loss = latent_loss
+
+        inception_score.update(pred_images)
 
         optimizer.zero_grad()
         loss.backward()
@@ -136,6 +140,8 @@ def train(epoch, batch_size, num_batches, model, stylegan, optimizer, criterion)
             latent_losses.update(latent_loss.item(), pred_z.shape[0])
 
         total_losses.update(loss.item(), pred_z.shape[0])
+
+        inception_score.update(pred_images) 
 
         iter_time.update(time.time() - start)
         if batch_idx % 10 == 0:
@@ -154,6 +160,10 @@ def train(epoch, batch_size, num_batches, model, stylegan, optimizer, criterion)
                        'Total Loss {total_loss.val:.4f} ({total_loss.avg:.4f})\t')
                       .format(epoch, batch_idx, num_batches,
                               iter_time=iter_time, total_loss=total_losses))
+    
+    inception_mean, inception_std = inception_score.compute()
+    print(f'Epoch {epoch} - Inception Score: Mean={inception_mean:.4f}, Std={inception_std:.4f}')
+    
     if args.reconstruction_loss_weight != -1:
         losses_list.append([float(latent_losses.avg), float(reconstruction_losses.avg), float(total_losses.avg)])
     else:
