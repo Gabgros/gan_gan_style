@@ -126,7 +126,7 @@ def train(epoch, batch_size, num_batches, model, stylegan, optimizer, criterion)
         # TODO: It seems that the inception score needs images to be uint8 type. But we produce float images. I don't
         #  know if this is the right input, probably we have to transpose the tensor or do other operations.
         #  Can you take a look into it?
-        inception_score.update(pred_images)
+        # inception_score.update(pred_images)
 
         if args.reconstruction_loss_weight != -1:
             reconstruction_loss = criterion(pred_images, images)
@@ -200,6 +200,9 @@ def main():
         model = DummyModel()
     elif args.model == 'Encoder':
         model = Encoder(in_channels, output_size)
+    elif args.model == 'ResNet':
+        model = torch.hub.load('pytorch/vision:v0.10.0', 'resnet18', pretrained=True)
+        model.fc = nn.Linear(model.fc.in_features, output_size)
     else:
         print("You must select a model! Dying...")
         exit()
