@@ -122,15 +122,17 @@ def train(epoch, batch_size, num_batches, model, stylegan, optimizer, criterion)
 
         pred_z = model(images)
         latent_loss = criterion(pred_z, z)
+        pred_images = stylegan(pred_z, dummy_label)  # genetating images using predicted z
+        # TODO: It seems that the inception score needs images to be uint8 type. But we produce float images. I don't
+        #  know if this is the right input, probably we have to transpose the tensor or do other operations.
+        #  Can you take a look into it?
+        inception_score.update(pred_images)
 
         if args.reconstruction_loss_weight != -1:
-            pred_images = stylegan(pred_z, dummy_label) # genetating images using predicted z
             reconstruction_loss = criterion(pred_images, images)
             loss = args.latent_loss_weight * latent_loss + args.reconstruction_loss_weight * reconstruction_loss
         else:
             loss = latent_loss
-
-        inception_score.update(pred_images)
 
         optimizer.zero_grad()
         loss.backward()
@@ -141,7 +143,6 @@ def train(epoch, batch_size, num_batches, model, stylegan, optimizer, criterion)
 
         total_losses.update(loss.item(), pred_z.shape[0])
 
-        inception_score.update(pred_images) 
 
         iter_time.update(time.time() - start)
         if batch_idx % 10 == 0:
