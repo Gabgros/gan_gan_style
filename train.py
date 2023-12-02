@@ -113,7 +113,7 @@ def train(epoch, batch_size, num_batches, model, stylegan, optimizer, criterion)
     total_losses = AverageMeter()
     model.train()
 
-    inception_score = InceptionScore()
+    # inception_score = InceptionScore()
 
     for batch_idx in range(num_batches):
         start = time.time()
@@ -162,8 +162,8 @@ def train(epoch, batch_size, num_batches, model, stylegan, optimizer, criterion)
                       .format(epoch, batch_idx, num_batches,
                               iter_time=iter_time, total_loss=total_losses))
     
-    inception_mean, inception_std = inception_score.compute()
-    print(f'Epoch {epoch} - Inception Score: Mean={inception_mean:.4f}, Std={inception_std:.4f}')
+    # inception_mean, inception_std = inception_score.compute()
+    # print(f'Epoch {epoch} - Inception Score: Mean={inception_mean:.4f}, Std={inception_std:.4f}')
     
     if args.reconstruction_loss_weight != -1:
         losses_list.append([float(latent_losses.avg), float(reconstruction_losses.avg), float(total_losses.avg)])
