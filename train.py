@@ -236,7 +236,7 @@ def main():
                 print("Model saved successfully")
     except KeyboardInterrupt:
         plot_sanity_check_image("stop", ref_image, model, stylegan)
-        save_all_plots("./results.png", losses_list)
+        save_all_plots("./results", losses_list)
         torch.save(model.state_dict(), checkpoints_dir + args.model.lower() + '_stop.pth')
         print("Model saved successfully. Gracefully exiting...")
 

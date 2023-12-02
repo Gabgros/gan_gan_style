@@ -12,7 +12,7 @@ Train:
 
 network:
   model: ResNet
-  ResNetVersion: resnet34
+  ResNetVersion: resnet18
 
 loss:
   loss_type: MSE
