@@ -14,7 +14,7 @@ from torch.backends import cudnn
 cudnn.benchmark = True
 import warnings
 from torch.optim.lr_scheduler import StepLR
-from torchmetrics.image.inception import InceptionScore
+# from torchmetrics.image.inception import InceptionScore
 # warnings.filterwarnings('ignore')
 
 
