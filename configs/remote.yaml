@@ -1,6 +1,6 @@
 Train:
   epochs: 100000
-  batch_size: 10
+  batch_size: 8
   train_num_batches: 100
   save_rate: 50
   plot_rate: 4
@@ -12,6 +12,7 @@ Train:
 
 network:
   model: ResNet
+  ResNetVersion: resnet34
 
 loss:
   loss_type: MSE
