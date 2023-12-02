@@ -25,7 +25,10 @@ in_channels = 3
 output_size = 512
 network_pkl = "https://nvlabs-fi-cdn.nvidia.com/stylegan2-ada-pytorch/pretrained/metfaces.pkl"
 dummy_label = None
-checkpoints_dir = './results/checkpoints/'
+results_dir = "./results/"
+checkpoints_dir = results_dir + "checkpoints/"
+painting_sanity_check_dir = results_dir + "sanity_check_images/"
+real_sanity_check_dir = results_dir + "real_images/"
 losses_list = []
 
 class DummyStyleGan(nn.Module):
@@ -44,8 +47,8 @@ class DummyModel(nn.Module):
         return x
 
 
-def init_ref_image():
-    img = Image.open('./results/sanity_check_images/reference_image.png')
+def init_ref_image(path):
+    img = Image.open(path)
     transform = Compose([
         Resize((1024, 1024)),
         ToTensor(),
@@ -171,19 +174,19 @@ def train(epoch, batch_size, num_batches, model, stylegan, optimizer, criterion)
         losses_list.append([float(total_losses.avg)])
 
 
-def plot_sanity_check_image(epoch, ref_image, model, stylegan):
+def plot_sanity_check_image(epoch, ref_image, target_dir, model, stylegan):
     model.eval()
     pred_z = model(ref_image)
     img = stylegan(pred_z, dummy_label)
     img = (img.permute(0, 2, 3, 1) * 127.5 + 128).clamp(0, 255).to(torch.uint8)
-    if not os.path.exists('./results/sanity_check_images'):
-        os.makedirs('./results/sanity_check_images')
-    Image.fromarray(img[0].cpu().numpy(), 'RGB').save(f'./results/sanity_check_images/epoch_{epoch}.png')
+    if not os.path.exists(target_dir):
+        os.makedirs(target_dir)
+    Image.fromarray(img[0].cpu().numpy(), 'RGB').save(target_dir + f"epoch_{epoch}.png")
 
 
 def main():
-    if not os.path.exists('./results'):
-        os.makedirs('./results')
+    if not os.path.exists(results_dir):
+        os.makedirs(results_dir)
     if not os.path.exists(checkpoints_dir):
         os.makedirs(checkpoints_dir)
     global args
@@ -221,22 +224,25 @@ def main():
     # We will add back the scheduler later, once we have better results.
     # scheduler = StepLR(optimizer, step_size=args.lr_step_size, gamma=args.lr_gamma)
     stylegan = init_style_gan()
-    ref_image = init_ref_image()
+    painting_ref_image = init_ref_image(painting_sanity_check_dir + "reference_image.png")
+    real_ref_image = init_ref_image(real_sanity_check_dir + "reference_image.jpg")
     try:
         for epoch in range(args.epochs):
             train(epoch, args.batch_size, args.train_num_batches, model, stylegan, optimizer, criterion)
             # scheduler.step()
             if epoch % args.plot_rate == 0:
-                plot_sanity_check_image(epoch, ref_image, model, stylegan)
-                save_all_plots("./results", losses_list)
+                plot_sanity_check_image(epoch, painting_ref_image, painting_sanity_check_dir, model, stylegan)
+                plot_sanity_check_image(epoch, real_ref_image, real_sanity_check_dir, model, stylegan)
+                save_all_plots(results_dir, losses_list)
                 print("Results saved")
 
             if epoch % args.save_rate == 0:
                 torch.save(model.state_dict(), checkpoints_dir + args.model.lower() + '_' + str(epoch) + '.pth')
                 print("Model saved successfully")
     except KeyboardInterrupt:
-        plot_sanity_check_image("stop", ref_image, model, stylegan)
-        save_all_plots("./results", losses_list)
+        plot_sanity_check_image("stop", painting_ref_image, painting_sanity_check_dir, model, stylegan)
+        plot_sanity_check_image("stop", real_ref_image, real_sanity_check_dir, model, stylegan)
+        save_all_plots(results_dir, losses_list)
         torch.save(model.state_dict(), checkpoints_dir + args.model.lower() + '_stop.pth')
         print("Model saved successfully. Gracefully exiting...")
 

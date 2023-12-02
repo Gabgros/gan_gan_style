@@ -1,5 +1,5 @@
 Train:
-  epochs: 2
+  epochs: 20
   batch_size: 2
   train_num_batches: 2
   val_num_batches: 1
@@ -12,7 +12,7 @@ Train:
   latent_loss_weight: 1
 
 network:
-  model: ResNet
+  model: Encoder
   ResNetVersion: resnet18
 
 loss:
