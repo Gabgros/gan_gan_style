@@ -79,9 +79,9 @@ def save_all_plots(dir_prefix,):
     if args.latent_loss_weight != -1:
         save_plot(dir_prefix + "/latent_loss_curve.png", "Latent Loss", latent_losses_list)
     if args.reconstruction_loss_weight != -1:
-        save_plot(dir_prefix + "/reconstruction_loss_curve.png", "Reconstruction Loss", latent_losses_list)
+        save_plot(dir_prefix + "/reconstruction_loss_curve.png", "Reconstruction Loss", reconstruction_losses_list)
     if args.kl_div_loss_weight != -1:
-        save_plot(dir_prefix + "/kl_loss_curve.png", "KL Loss", latent_losses_list)
+        save_plot(dir_prefix + "/kl_loss_curve.png", "KL Loss", kl_div_losses_list)
     save_plot(dir_prefix + "/loss_curve.png", "Loss", total_losses_list)
 
 
