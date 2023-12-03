@@ -12,11 +12,12 @@ from models.encoder import Encoder
 import legacy
 import dnnlib
 from torch.backends import cudnn
-cudnn.benchmark = True
 import warnings
+cudnn.benchmark = True
+warnings.filterwarnings('ignore')
 from torch.optim.lr_scheduler import StepLR
 # from torchmetrics.image.inception import InceptionScore
-# warnings.filterwarnings('ignore')
+
 
 
 parser = argparse.ArgumentParser(description='GanGan style encoder training loop')
@@ -171,7 +172,7 @@ def train(epoch, batch_size, num_batches, model, stylegan, optimizer, criterion)
     if args.reconstruction_loss_weight != -1:
         reconstruction_losses_list.append(float(reconstruction_losses.avg))
     if args.kl_div_loss_weight != -1:
-        reconstruction_losses_list.append(float(kl_losses.avg))
+        kl_div_losses_list.append(float(kl_losses.avg))
     total_losses_list.append(float(total_losses.avg))
 
 
