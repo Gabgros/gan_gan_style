@@ -2,7 +2,6 @@ Train:
   epochs: 20
   batch_size: 2
   train_num_batches: 2
-  val_num_batches: 1
   save_rate: 20
   plot_rate: 1
   learning_rate: 0.00001
@@ -10,6 +9,7 @@ Train:
   lr_gamma: 0.5
   reconstruction_loss_weight: -1
   latent_loss_weight: 1
+  kl_div_loss_weight: 1
 
 network:
   model: Encoder

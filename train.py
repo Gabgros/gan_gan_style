@@ -5,6 +5,7 @@ import os
 import matplotlib.pyplot as plt
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from PIL import Image
 from torchvision.transforms import Compose, Resize, ToTensor
 from models.encoder import Encoder
@@ -29,22 +30,16 @@ results_dir = "./results/"
 checkpoints_dir = results_dir + "checkpoints/"
 painting_sanity_check_dir = results_dir + "sanity_check_images/"
 real_sanity_check_dir = results_dir + "real_images/"
-losses_list = []
+latent_losses_list = []
+reconstruction_losses_list = []
+kl_div_losses_list = []
+total_losses_list = []
 
-class DummyStyleGan(nn.Module):
-    def forward(self, x):
-        return torch.zeros((x.shape[0], 3, 1024, 1024))
 
-class DummyModel(nn.Module):
-    def __init__(self):
-        super(DummyModel, self).__init__()
-        self.conv_layer1 = nn.Sequential(
-            nn.Conv2d(in_channels=3, out_channels=32, kernel_size=3, stride=1, padding=1),
-            nn.Dropout(0.1), nn.BatchNorm2d(32), nn.LeakyReLU(),
-            nn.MaxPool2d(kernel_size=2, stride=2)
-        )
-    def forward(self, x):
-        return x
+def compute_kl_divergence(model_out, target):
+    model_out_softmax = F.log_softmax(model_out, dim=1)
+    target_softmax = F.softmax(target, dim=1)
+    return F.kl_div(model_out_softmax, target_softmax)
 
 
 def init_ref_image(path):
@@ -79,16 +74,15 @@ def save_plot(name, label, plot_list):
     plt.close()
     print(f"Plot {label} saved")
 
-def save_all_plots(dir_prefix, all_plot_list):
+def save_all_plots(dir_prefix,):
     plt.figure(figsize=(10, 5))
+    if args.latent_loss_weight != -1:
+        save_plot(dir_prefix + "/latent_loss_curve.png", "Latent Loss", latent_losses_list)
     if args.reconstruction_loss_weight != -1:
-        latent_losses, reconstruction_losses, total_losses = zip(*all_plot_list)
-        save_plot(dir_prefix + "/latent_loss_curve.png", "Latent Loss", latent_losses)
-        save_plot(dir_prefix + "/reconstruction_loss_curve.png", "Reconstruction Loss", reconstruction_losses)
-    else:
-        total_losses = all_plot_list
-
-    save_plot(dir_prefix + "/loss_curve.png", "Loss", total_losses)
+        save_plot(dir_prefix + "/reconstruction_loss_curve.png", "Reconstruction Loss", latent_losses_list)
+    if args.kl_div_loss_weight != -1:
+        save_plot(dir_prefix + "/kl_loss_curve.png", "KL Loss", latent_losses_list)
+    save_plot(dir_prefix + "/loss_curve.png", "Loss", total_losses_list)
 
 
 class AverageMeter(object):
@@ -113,6 +107,7 @@ def train(epoch, batch_size, num_batches, model, stylegan, optimizer, criterion)
     iter_time = AverageMeter()
     latent_losses = AverageMeter()
     reconstruction_losses = AverageMeter()
+    kl_losses = AverageMeter()
     total_losses = AverageMeter()
     model.train()
 
@@ -124,54 +119,60 @@ def train(epoch, batch_size, num_batches, model, stylegan, optimizer, criterion)
         images = stylegan(z, dummy_label)
 
         pred_z = model(images)
-        latent_loss = criterion(pred_z, z)
         pred_images = stylegan(pred_z, dummy_label)  # genetating images using predicted z
         # TODO: It seems that the inception score needs images to be uint8 type. But we produce float images. I don't
         #  know if this is the right input, probably we have to transpose the tensor or do other operations.
         #  Can you take a look into it?
         # inception_score.update(pred_images)
 
+        loss = None
+        latent_loss_str = ''
+        reconstruction_loss_str = ''
+        kl_loss_str = ''
+        if args.latent_loss_weight != -1:
+            latent_loss = criterion(pred_z, z)
+            loss = args.latent_loss_weight * latent_loss
+            latent_losses.update(latent_loss.item(), pred_z.shape[0])
+            latent_loss_str = f'Latent Loss {latent_losses.val:.4f} ({latent_losses.avg:.4f})\t'
         if args.reconstruction_loss_weight != -1:
             reconstruction_loss = criterion(pred_images, images)
-            loss = args.latent_loss_weight * latent_loss + args.reconstruction_loss_weight * reconstruction_loss
-        else:
-            loss = latent_loss
+            temp_a = args.reconstruction_loss_weight * reconstruction_loss
+            loss = temp_a if loss is None else loss + temp_a
+            reconstruction_losses.update(reconstruction_loss.item(), pred_z.shape[0])
+            reconstruction_loss_str = f'Reconstruction Loss {reconstruction_losses.val:.4f} ({reconstruction_losses.avg:.4f})\t'
+        if args.kl_div_loss_weight != -1:
+            kl_div_loss = compute_kl_divergence(pred_z, z)
+            temp_b = args.kl_div_loss_weight * kl_div_loss
+            loss = temp_b if loss is None else loss + temp_b
+            kl_losses.update(kl_div_loss.item(), pred_z.shape[0])
+            kl_loss_str = f'KL Loss {kl_losses.val:.4f} ({kl_losses.avg:.4f})\t'
+
+        total_losses.update(loss.item(), pred_z.shape[0])
 
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
-        if args.reconstruction_loss_weight != -1:
-            reconstruction_losses.update(reconstruction_loss.item(), pred_z.shape[0])
-            latent_losses.update(latent_loss.item(), pred_z.shape[0])
-
-        total_losses.update(loss.item(), pred_z.shape[0])
 
 
         iter_time.update(time.time() - start)
         if batch_idx % 10 == 0:
-            if args.reconstruction_loss_weight != -1:
                 print(('Train: Epoch: [{0}][{1}/{2}]\t'
                        'Time {iter_time.val:.3f} ({iter_time.avg:.3f})\t'
-                       'Latent Loss {latent_loss.val:.4f} ({latent_loss.avg:.4f})\t'
-                       'Reconstruction Loss {reconstruction_loss.val:.4f} ({reconstruction_loss.avg:.4f})\t'
-                       'Total Loss {total_loss.val:.4f} ({total_loss.avg:.4f})\t')
-                      .format(epoch, batch_idx, num_batches,
-                              iter_time=iter_time, latent_loss=latent_losses,
-                              reconstruction_loss=reconstruction_losses, total_loss=total_losses))
-            else:
-                print(('Train: Epoch: [{0}][{1}/{2}]\t'
-                       'Time {iter_time.val:.3f} ({iter_time.avg:.3f})\t'
+                       f'{latent_loss_str}{reconstruction_loss_str}{kl_loss_str}'
                        'Total Loss {total_loss.val:.4f} ({total_loss.avg:.4f})\t')
                       .format(epoch, batch_idx, num_batches,
                               iter_time=iter_time, total_loss=total_losses))
     
     # inception_mean, inception_std = inception_score.compute()
     # print(f'Epoch {epoch} - Inception Score: Mean={inception_mean:.4f}, Std={inception_std:.4f}')
-    
+
+    if args.latent_loss_weight != -1:
+        latent_losses_list.append(float(latent_losses.avg))
     if args.reconstruction_loss_weight != -1:
-        losses_list.append([float(latent_losses.avg), float(reconstruction_losses.avg), float(total_losses.avg)])
-    else:
-        losses_list.append([float(total_losses.avg)])
+        reconstruction_losses_list.append(float(reconstruction_losses.avg))
+    if args.kl_div_loss_weight != -1:
+        reconstruction_losses_list.append(float(kl_losses.avg))
+    total_losses_list.append(float(total_losses.avg))
 
 
 def plot_sanity_check_image(epoch, ref_image, target_dir, model, stylegan):
@@ -199,9 +200,7 @@ def main():
             setattr(args, k, v)
 
 
-    if args.model == 'DummyModel':
-        model = DummyModel()
-    elif args.model == 'Encoder':
+    if args.model == 'Encoder':
         model = Encoder(in_channels, output_size)
     elif args.model == 'ResNet':
         model = torch.hub.load('pytorch/vision:v0.10.0', args.ResNetVersion, pretrained=True)
@@ -233,7 +232,7 @@ def main():
             if epoch % args.plot_rate == 0:
                 plot_sanity_check_image(epoch, painting_ref_image, painting_sanity_check_dir, model, stylegan)
                 plot_sanity_check_image(epoch, real_ref_image, real_sanity_check_dir, model, stylegan)
-                save_all_plots(results_dir, losses_list)
+                save_all_plots(results_dir)
                 print("Results saved")
 
             if epoch % args.save_rate == 0:
@@ -242,7 +241,7 @@ def main():
     except KeyboardInterrupt:
         plot_sanity_check_image("stop", painting_ref_image, painting_sanity_check_dir, model, stylegan)
         plot_sanity_check_image("stop", real_ref_image, real_sanity_check_dir, model, stylegan)
-        save_all_plots(results_dir, losses_list)
+        save_all_plots(results_dir)
         torch.save(model.state_dict(), checkpoints_dir + args.model.lower() + '_stop.pth')
         print("Model saved successfully. Gracefully exiting...")
 
