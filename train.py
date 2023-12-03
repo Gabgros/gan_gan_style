@@ -39,7 +39,7 @@ total_losses_list = []
 def compute_kl_divergence(model_out, target):
     model_out_softmax = F.log_softmax(model_out, dim=1)
     target_softmax = F.softmax(target, dim=1)
-    return F.kl_div(model_out_softmax, target_softmax)
+    return F.kl_div(model_out_softmax, target_softmax, reduction="batchmean")
 
 
 def init_ref_image(path):
