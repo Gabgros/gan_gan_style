@@ -1,8 +1,8 @@
 Train:
-  epochs: 20
+  epochs: 100000
   batch_size: 2
   train_num_batches: 2
-  save_rate: 20
+  save_rate: 5
   plot_rate: 1
   learning_rate: 0.00001
   lr_step_size: 30
