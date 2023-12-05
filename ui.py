@@ -14,11 +14,13 @@ transform = Compose([
         ToTensor(),
     ])
 
-model = torch.hub.load('pytorch/vision:v0.10.0', 'resnet18', pretrained=True)
-model.fc = torch.nn.Linear(model.fc.in_features, output_size)
-# model = Encoder(3, output_size)
-# model.load_state_dict(torch.load("./results/checkpoints/encoder_stop.pth"))
-model.load_state_dict(torch.load("./results/checkpoints/resnet_test_test.pth"))
+save_image = True
+target_dir = "./generated_images/"
+# model = torch.hub.load('pytorch/vision:v0.10.0', 'resnet18', pretrained=True)
+# model.fc = torch.nn.Linear(model.fc.in_features, output_size)
+model = Encoder(3, output_size)
+model.load_state_dict(torch.load("./results/checkpoints/encoder_stop.pth"))
+model.load_state_dict(torch.load("./results/checkpoints/encoder_200.pth"))
 if torch.cuda.is_available():
     model = model.to("cuda")
 model.eval()
@@ -61,6 +63,8 @@ def generateImage(mylabel):
     img = (img.permute(0, 2, 3, 1) * 127.5 + 128).clamp(0, 255).to(torch.uint8)
     img = Image.fromarray(img[0].cpu().numpy(), 'RGB')
     set_img_ui(img)
+    if save_image:
+        img.save(target_dir + f"gen_image.png")
 
 
 frm = Frame(root)
